@@ -1,0 +1,6 @@
+setup.py
+xgboost_predictor.py
+xgboost_predictor.egg-info/PKG-INFO
+xgboost_predictor.egg-info/SOURCES.txt
+xgboost_predictor.egg-info/dependency_links.txt
+xgboost_predictor.egg-info/top_level.txt
