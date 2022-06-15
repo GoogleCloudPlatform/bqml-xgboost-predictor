@@ -23,6 +23,9 @@ import sys
 from absl import flags
 from absl.testing import absltest
 from bqml_xgboost_predictor import predictor
+import mock
+import numpy as np
+import xgboost as xgb
 
 # pylint: disable=g-import-not-at-top
 if sys.version_info >= (3, 9):  # `importlib.resources.files` was added in 3.9
@@ -50,8 +53,8 @@ class PredictorTest(absltest.TestCase):
         'f2': ['c', 'a', 'a', 'f'],
         'f3': 0
     }])['predicted_label']
-    self.assertAlmostEqual(1.9788086414337158, predict_output[0])
-    self.assertAlmostEqual(1.9364699125289917, predict_output[1])
+    self.assertSequenceAlmostEqual([1.0370053052902222, 1.9364699125289917],
+                                   predict_output)
 
   def test_boosted_tree_classifier(self):
     model_path = str(
@@ -100,6 +103,116 @@ class PredictorTest(absltest.TestCase):
     self.assertSequenceAlmostEqual(
         [0.19618307054042816, 0.47606906294822693, 0.3277478516101837],
         predict_output[1]['label_probs'])
+
+  @mock.patch('bqml_xgboost_predictor.predictor.xgb')
+  def test_target_encode_encoded_input(self, mock_xgb):
+    mock_xgb.DMatrix.return_value = xgb.DMatrix(
+        np.array([[1.0], [1.0]]), missing=None)
+    model_path = str(
+        importlib_resources.files('bqml_xgboost_predictor').joinpath(
+            'testdata/target_encode_model'))
+    test_predictor = predictor.Predictor.from_path(model_path)
+    _ = test_predictor.predict([{
+        'f1': 'b',
+        'f3': 'c',
+        'f2': ['d']
+    }, {
+        'f1': 'f',
+        'f2': ['c', 'a', 'a', 'f'],
+        'f3': 'a'
+    }, {
+        'f1': 'f',
+        'f2': ['d'],
+        'f3': 'a'
+    }, {
+        'f1': 'd',
+        'f2': ['d'],
+        'f3': 'a'
+    }])
+    encoded = [[0.3, 0.7, 1.0, None, 3.0], [None, None, 0.45, 0.3, 1.0],
+               [None, None, 1.0, None, 1.0], [1.0, None, 1.0, None, 1.0]]
+    np.testing.assert_array_equal(
+        np.array(encoded, dtype=float), mock_xgb.DMatrix.call_args[0][0])
+
+  def test_sparse_feature_model(self):
+    model_path = str(
+        importlib_resources.files('bqml_xgboost_predictor').joinpath(
+            'testdata/sparse_feature_model'))
+    test_predictor = predictor.Predictor.from_path(model_path)
+    predict_output = test_predictor.predict([{
+        'f1': 'b',
+        'f3': 3,
+        'f2': [(1, 1.0)]
+    }, {
+        'f1': 'f',
+        'f2': [(1, 1.0), (2, 1.0), (3, 1.0)],
+        'f3': 0
+    }])['predicted_label']
+    self.assertSequenceAlmostEqual([1.0370053052902222, 1.9364699125289917],
+                                   predict_output)
+
+  def test_sparse_feature_model_2(self):
+    model_path = str(
+        importlib_resources.files('bqml_xgboost_predictor').joinpath(
+            'testdata/sparse_feature_model_2'))
+    test_predictor = predictor.Predictor.from_path(model_path)
+    predict_output = test_predictor.predict([{
+        'f1': 'b',
+        'f2': [(1, 1.0), (4, 3.0)]
+    }, {
+        'f1': 'f',
+        'f2': [(1, 1.0), (2, 1.0), (3, 1.0)],
+    }])['predicted_label']
+    self.assertSequenceAlmostEqual([1.0370053052902222, 1.9364699125289917],
+                                   predict_output)
+
+  def test_sparse_feature_model_3(self):
+    model_path = str(
+        importlib_resources.files('bqml_xgboost_predictor').joinpath(
+            'testdata/sparse_feature_model_3'))
+    test_predictor = predictor.Predictor.from_path(model_path)
+    predict_output = test_predictor.predict([{
+        'f1': 1.0,
+        'f2': 'a',
+        'f3': ['a', 'b'],
+        'f4': [(1, 1.0), (3, 2.0)]
+    }, {
+        'f1': 2.0,
+        'f2': 'b',
+        'f3': ['a', 'c'],
+        'f4': [(1, 2.0)]
+    }])
+    self.assertEqual('1', predict_output[0]['predicted_label'])
+    self.assertSequenceAlmostEqual([0.11146856844425201, 0.8885313868522644],
+                                   predict_output[0]['label_probs'])
+    self.assertEqual('1', predict_output[1]['predicted_label'])
+    self.assertSequenceAlmostEqual([0.23098896443843842, 0.7690110802650452],
+                                   predict_output[1]['label_probs'])
+
+  @mock.patch('bqml_xgboost_predictor.predictor.xgb')
+  def test_sparse_feature_model_3_encoded_input(self, mock_xgb):
+    mock_xgb.DMatrix.return_value = xgb.DMatrix(
+        np.array([[1.0], [1.0]]), missing=None)
+    model_path = str(
+        importlib_resources.files('bqml_xgboost_predictor').joinpath(
+            'testdata/sparse_feature_model_3'))
+    test_predictor = predictor.Predictor.from_path(model_path)
+    _ = test_predictor.predict([{
+        'f1': 1.0,
+        'f2': 'a',
+        'f3': ['a', 'b'],
+        'f4': [(1, 1.0), (3, 2.0)]
+    }, {
+        'f1': 2.0,
+        'f2': 'b',
+        'f3': ['a', 'c'],
+        'f4': [(1, 2.0)]
+    }])
+    encoded = [[
+        1.0, 1.0, None, 1.0, 1.0, None, None, None, None, 1.0, None, 2.0
+    ], [2.0, 2.0, None, 1.0, None, 1.0, None, None, None, 2.0, None, None]]
+    np.testing.assert_array_equal(
+        np.array(encoded, dtype=float), mock_xgb.DMatrix.call_args[0][0])
 
 
 if __name__ == '__main__':

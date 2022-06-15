@@ -30,7 +30,8 @@ class Predictor(object):
 
   def __init__(self, model, model_metadata, categorical_one_hot_vocab,
                categorical_target_vocab, categorical_label_vocab,
-               array_one_hot_vocab, array_target_vocab):
+               array_one_hot_vocab, array_target_vocab,
+               array_struct_dimension_dict):
     """Initializes a Predictor for XGBoost model serving.
 
     Args:
@@ -41,6 +42,7 @@ class Predictor(object):
       categorical_label_vocab: dict for label encode categorical features.
       array_one_hot_vocab: dict for one-hot encode array features.
       array_target_vocab: dict for target encode array features.
+      array_struct_dimension_dict: dict for array struct dimensions.
 
     Returns:
       A 'Predictor' instance.
@@ -52,6 +54,7 @@ class Predictor(object):
     self._categorical_label_vocab = categorical_label_vocab
     self._array_one_hot_vocab = array_one_hot_vocab
     self._array_target_vocab = array_target_vocab
+    self._array_struct_dimension_dict = array_struct_dimension_dict
     self._model_type = None
     self._label_col = None
     self._feature_name_to_index_map = {}
@@ -123,6 +126,12 @@ class Predictor(object):
         if feature_index not in self._array_target_vocab:
           raise ValueError('feature_index %d missing in _array_target_vocab' %
                            feature_index)
+      elif feature_metadata['encode_type'] == 'array_struct':
+        if (self._array_struct_dimension_dict and
+            feature_index not in self._array_struct_dimension_dict):
+          raise ValueError(
+              'feature_index %d missing in _array_struct_dimension_dict' %
+              feature_index)
       else:
         raise ValueError('Invalid encode_type %s for feature %s' %
                          (feature_metadata['encode_type'], feature_name))
@@ -157,7 +166,7 @@ class Predictor(object):
         feature_index = self._feature_name_to_index_map[feature_name]
         if feature_index in self._categorical_one_hot_vocab:
           vocab = self._categorical_one_hot_vocab[feature_index]
-          one_hot_list = [0.0] * len(vocab)
+          one_hot_list = [None] * len(vocab)
           col_value = str(col)
           if col_value in vocab:
             one_hot_list[vocab.index(col_value)] = 1.0
@@ -168,6 +177,10 @@ class Predictor(object):
           # None will be automatically handled by xgboost lib.
           target_list = vocab.get(col_value,
                                   [None] * len(list(vocab.values())[0]))
+          # We will treat the zero value as missing value for multi-class
+          # models.
+          if len(target_list) > 1:
+            target_list = [None if x == 0.0 else x for x in target_list]
           encoded_row.extend(target_list)
         elif feature_index in self._categorical_label_vocab:
           vocab = self._categorical_label_vocab[feature_index]
@@ -179,7 +192,7 @@ class Predictor(object):
             encoded_row.append(None)
         elif feature_index in self._array_one_hot_vocab:
           vocab = self._array_one_hot_vocab[feature_index]
-          one_hot_list = [0.0] * len(vocab)
+          one_hot_list = [None] * len(vocab)
           try:
             for item in col:
               item_value = str(item)
@@ -199,10 +212,31 @@ class Predictor(object):
                                            [0.0] * len(list(vocab.values())[0]))
               item_target_list = [x / float(len(col)) for x in item_target_list]
               target_list = [sum(x) for x in zip(target_list, item_target_list)]
+
+            # We will treat the zero value as missing value for multi-class
+            # models.
+            if len(target_list) > 1:
+              target_list = [None if x == 0.0 else x for x in target_list]
             encoded_row.extend(target_list)
           except ValueError:
             raise ValueError('The feature %s in row %d is not an array' %
                              (feature_name, row_index))
+        elif (self._array_struct_dimension_dict and
+              feature_index in self._array_struct_dimension_dict):
+          dimension = self._array_struct_dimension_dict[feature_index]
+          array_struct_dense_vector = [None] * dimension
+
+          for item in col:
+            key = item[0]
+            if key < 0:
+              raise ValueError('The key of the sparse feature %s in row %d is '
+                               'smaller than 0.' % (feature_name, row_index))
+            if key > dimension:
+              raise ValueError('The key of the sparse feature %s in row %d is '
+                               'larger than the sparse feature dimension %d.' %
+                               (feature_name, row_index, dimension))
+            array_struct_dense_vector[item[0]] = item[1]
+          encoded_row.extend(array_struct_dense_vector)
         else:
           # Numerical feature.
           try:
@@ -231,7 +265,8 @@ class Predictor(object):
     # We have to convert encoded from list to numpy array, otherwise xgb will
     # take 0s as missing values.
     prediction_input = xgb.DMatrix(
-        np.array(encoded).reshape((len(instances), -1)), missing=None)
+        np.array(encoded, dtype=float).reshape((len(instances), -1)),
+        missing=None)
     if self._model_type == 'boosted_tree_classifier':
       outputs = self._model.predict(prediction_input)
       final_outputs = []
@@ -275,6 +310,7 @@ class Predictor(object):
     categorical_label_vocab = {}
     array_one_hot_vocab = {}
     array_target_vocab = {}
+    array_struct_dimension_dict = {}
     for txt_file in txt_list:
       categorical_one_hot_found = re.search(r'(\d+)_categorical_one_hot.txt',
                                             txt_file)
@@ -286,6 +322,8 @@ class Predictor(object):
       array_one_hot_found = re.search(r'(\d+)_array_one_hot.txt', txt_file)
       array_one_hot_found_legacy = re.search(r'(\d+)_array.txt', txt_file)
       array_target_found = re.search(r'(\d+)_array_target.txt', txt_file)
+      array_struct_found = re.search(r'(\d+)_array_struct_dimension.txt',
+                                     txt_file)
       if categorical_one_hot_found:
         feature_index = int(categorical_one_hot_found.group(1))
         with open(txt_file) as f:
@@ -334,7 +372,18 @@ class Predictor(object):
                   '%s does not have the right format for target encoding' %
                   (txt_file))
         array_target_vocab[feature_index] = target_dict
+      elif array_struct_found:
+        feature_index = int(array_struct_found.group(1))
+        with open(txt_file) as f:
+          try:
+            dimension = int(f.read().strip())
+            array_struct_dimension_dict[feature_index] = dimension
+          except ValueError:
+            raise ValueError(
+                '%s does not have the right format for array struct dimension' %
+                (txt_file))
 
     return cls(model, model_metadata, categorical_one_hot_vocab,
                categorical_target_vocab, categorical_label_vocab,
-               array_one_hot_vocab, array_target_vocab)
+               array_one_hot_vocab, array_target_vocab,
+               array_struct_dimension_dict)
