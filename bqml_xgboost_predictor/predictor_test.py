@@ -39,7 +39,6 @@ FLAGS = flags.FLAGS
 class PredictorTest(absltest.TestCase):
 
   def test_boosted_tree_regressor(self):
-
     model_path = str(
         importlib_resources.files('bqml_xgboost_predictor').joinpath(
             'testdata/boosted_tree_regressor_model'))
@@ -78,6 +77,47 @@ class PredictorTest(absltest.TestCase):
         predict_output[0]['label_probs'])
     self.assertSequenceAlmostEqual(
         [0.19618307054042816, 0.47606906294822693, 0.3277478516101837],
+        predict_output[1]['label_probs'])
+
+  def test_random_forest_regressor(self):
+    model_path = str(
+        importlib_resources.files('bqml_xgboost_predictor').joinpath(
+            'testdata/random_forest_regressor_model'))
+    test_predictor = predictor.Predictor.from_path(model_path)
+    predict_output = test_predictor.predict([{
+        'f1': 'a',
+        'f3': 6,
+        'f2': 'a'
+    }, {
+        'f1': 'b',
+        'f2': 'b',
+        'f3': 0
+    }])['predicted_label']
+    self.assertSequenceAlmostEqual([0.974166214466095, 1.5916662216186523],
+                                   predict_output)
+
+  def test_random_forest_classifier(self):
+    model_path = str(
+        importlib_resources.files('bqml_xgboost_predictor').joinpath(
+            'testdata/random_forest_classifier_model'))
+    test_predictor = predictor.Predictor.from_path(model_path)
+    predict_output = test_predictor.predict([{
+        'f1': 'a',
+        'f3': 6,
+        'f2': 'a'
+    }, {
+        'f1': 'b',
+        'f2': 'b',
+        'f3': 0
+    }])
+    self.assertEqual('3', predict_output[0]['predicted_label'])
+    self.assertEqual('3', predict_output[1]['predicted_label'])
+    self.assertEqual(['3', '2', '1'], predict_output[0]['label_values'])
+    self.assertSequenceAlmostEqual(
+        [0.3333333432674408, 0.3333333432674408, 0.3333333432674408],
+        predict_output[0]['label_probs'])
+    self.assertSequenceAlmostEqual(
+        [0.3333333432674408, 0.3333333432674408, 0.3333333432674408],
         predict_output[1]['label_probs'])
 
   def test_target_encode(self):

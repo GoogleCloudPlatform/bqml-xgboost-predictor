@@ -70,13 +70,14 @@ class Predictor(object):
         1. Invalid model type.
         2. Label not found.
         3. Features not found.
-        4. Class names not found for boosted_tree_classifier.
+        4. Class names not found for {boosted_tree|random_forest}_classifier.
         6. Feature index mismatch.
         7. Invalid encode type for categorical features.
     """
     if 'model_type' not in self._model_metadata or self._model_metadata[
         'model_type'] not in [
-            'boosted_tree_regressor', 'boosted_tree_classifier'
+            'boosted_tree_regressor', 'boosted_tree_classifier',
+            'random_forest_regressor', 'random_forest_classifier'
         ]:
       raise ValueError('Invalid model_type in model_metadata')
     self._model_type = self._model_metadata['model_type']
@@ -86,7 +87,8 @@ class Predictor(object):
     if not self._model_metadata['features']:
       raise ValueError('No feature found in model_metadata')
     self._feature_names = self._model_metadata['feature_names']
-    if self._model_type == 'boosted_tree_classifier':
+    if self._model_type in ['boosted_tree_classifier',
+                            'random_forest_classifier']:
       if 'class_names' not in self._model_metadata or not self._model_metadata[
           'class_names']:
         raise ValueError('No class_names found in model_metadata')
@@ -267,7 +269,8 @@ class Predictor(object):
     prediction_input = xgb.DMatrix(
         np.array(encoded, dtype=float).reshape((len(instances), -1)),
         missing=None)
-    if self._model_type == 'boosted_tree_classifier':
+    if self._model_type in ['boosted_tree_classifier',
+                            'random_forest_classifier']:
       outputs = self._model.predict(prediction_input)
       final_outputs = []
       for np_output in outputs:
@@ -280,7 +283,7 @@ class Predictor(object):
         final_outputs.append(final_output)
       return final_outputs
     else:
-      # Boosted tree regressor.
+      # Boosted tree or random forest regressor.
       return {
           'predicted_' + self._label_col:
               self._model.predict(prediction_input).tolist()
