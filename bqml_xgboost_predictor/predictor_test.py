@@ -68,6 +68,10 @@ class PredictorTest(absltest.TestCase):
         'f1': 'f',
         'f2': ['c', 'a', 'a', 'f'],
         'f3': 0
+    }, {
+        'f1': 'f',
+        'f2': ['c', 'a', 'a', 'f'],
+        'f3': ''
     }])
     self.assertEqual('2', predict_output[0]['predicted_label'])
     self.assertEqual('2', predict_output[1]['predicted_label'])
@@ -78,6 +82,9 @@ class PredictorTest(absltest.TestCase):
     self.assertSequenceAlmostEqual(
         [0.19618307054042816, 0.47606906294822693, 0.3277478516101837],
         predict_output[1]['label_probs'])
+    self.assertSequenceAlmostEqual(
+        [0.19618307054042816, 0.47606906294822693, 0.3277478516101837],
+        predict_output[2]['label_probs'])
 
   def test_random_forest_regressor(self):
     model_path = str(

@@ -241,12 +241,16 @@ class Predictor(object):
           encoded_row.extend(array_struct_dense_vector)
         else:
           # Numerical feature.
-          try:
-            encoded_row.append(float(col))
-          except ValueError:
-            raise ValueError(
-                'The feature %s in row %d cannot be converted to float' %
-                (feature_name, row_index))
+          # Treat empty string as 0 as XAI use empty string as baseline.
+          if col == '':
+            encoded_row.append(0.0)
+          else:
+            try:
+              encoded_row.append(float(col))
+            except ValueError:
+              raise ValueError(
+                  'The feature %s in row %d cannot be converted to float' %
+                  (feature_name, row_index))
 
       preprocessed_data.append(encoded_row)
     return preprocessed_data
