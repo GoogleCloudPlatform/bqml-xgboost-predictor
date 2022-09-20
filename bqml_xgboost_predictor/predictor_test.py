@@ -51,7 +51,7 @@ class PredictorTest(absltest.TestCase):
         'f1': 'f',
         'f2': ['c', 'a', 'a', 'f'],
         'f3': 0
-    }])['predicted_label']
+    }])
     self.assertSequenceAlmostEqual([1.0370053052902222, 1.9364699125289917],
                                    predict_output)
 
@@ -99,7 +99,7 @@ class PredictorTest(absltest.TestCase):
         'f1': 'b',
         'f2': 'b',
         'f3': 0
-    }])['predicted_label']
+    }])
     self.assertSequenceAlmostEqual([0.974166214466095, 1.5916662216186523],
                                    predict_output)
 
@@ -194,7 +194,7 @@ class PredictorTest(absltest.TestCase):
         'f1': 'f',
         'f2': [(1, 1.0), (2, 1.0), (3, 1.0)],
         'f3': 0
-    }])['predicted_label']
+    }])
     self.assertSequenceAlmostEqual([1.0370053052902222, 1.9364699125289917],
                                    predict_output)
 
@@ -209,7 +209,7 @@ class PredictorTest(absltest.TestCase):
     }, {
         'f1': 'f',
         'f2': [(1, 1.0), (2, 1.0), (3, 1.0)],
-    }])['predicted_label']
+    }])
     self.assertSequenceAlmostEqual([1.0370053052902222, 1.9364699125289917],
                                    predict_output)
 

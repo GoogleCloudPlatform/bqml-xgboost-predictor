@@ -288,10 +288,7 @@ class Predictor(object):
       return final_outputs
     else:
       # Boosted tree or random forest regressor.
-      return {
-          'predicted_' + self._label_col:
-              self._model.predict(prediction_input).tolist()
-      }
+      return self._model.predict(prediction_input).tolist()
 
   @classmethod
   def from_path(cls, model_dir):
